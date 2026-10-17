@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 
 from backend.audit_engine import AuditEngine
 from backend.config import get_settings
-from backend.granite_service import GraniteService
+from backend.gemini_service import GeminiService
 from backend.models import (
     AuditConfig,
     AuditRequest,
@@ -69,7 +69,7 @@ _audits: dict[str, AuditSummary] = {}
 async def lifespan(app: FastAPI):
     """Startup / shutdown hooks."""
     settings = get_settings()
-    logger.info("The Auditor starting — model=%s", settings.granite_model_id)
+    logger.info("The Auditor starting — model=%s", settings.gemini_model_id)
     yield
     logger.info("The Auditor shutting down")
 
@@ -83,7 +83,7 @@ app = FastAPI(
     description=(
         "AI-assisted software test-quality auditing platform.  "
         "Evaluates whether a project's existing tests can detect "
-        "defects via mutation testing, powered by IBM Granite."
+        "defects via mutation testing, powered by Google Gemini."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -109,12 +109,13 @@ app.add_middleware(
 async def health_check():
     """Return service health and configuration status."""
     settings = get_settings()
-    granite = GraniteService(settings)
+    gemini = GeminiService(settings)
     return HealthResponse(
         status="healthy",
         version="1.0.0",
         timestamp=datetime.now(timezone.utc),
-        watsonx_configured=granite.is_available(),
+        gemini_configured=gemini.is_available(),
+        watsonx_configured=gemini.is_available(),
     )
 
 

@@ -2,8 +2,8 @@
 Tests for the AST-based mutation engine and the AuditEngine orchestrator.
 
 These tests verify mutation generation, mutant scoring, and the
-end-to-end audit pipeline **without** requiring IBM watsonx.ai
-credentials (the Granite service is mocked).
+end-to-end audit pipeline **without** requiring Google Gemini
+credentials (the Gemini service is mocked).
 """
 
 from __future__ import annotations
@@ -88,8 +88,8 @@ def sample_tests() -> str:
 def settings() -> Settings:
     """Test settings with AI features disabled."""
     return Settings(
-        watsonx_api_key="",
-        watsonx_project_id="",
+        gemini_api_key="test-api-key",
+        gemini_model_id="gemini-1.5-pro",
         max_mutations_per_file=20,
         ai_mutations_per_file=0,
         sandbox_timeout_seconds=30,

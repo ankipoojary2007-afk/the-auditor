@@ -6,12 +6,12 @@ Orchestrates the full mutation-testing pipeline:
 1. **Baseline check** — run the original test suite to confirm it passes.
 2. **AST mutation** — generate deterministic operator-level mutations
    via the Python ``ast`` module.
-3. **AI mutation** — request Granite-generated semantic mutations.
+3. **AI mutation** — request Gemini-generated semantic mutations.
 4. **Execution loop** — for each mutant, inject the mutation, run the
    tests in the sandbox, and record whether the mutant was *killed*
    or *survived*.
 5. **Analysis** — aggregate scores per file and overall, then (optionally)
-   ask Granite for a narrative report.
+   ask Gemini for a narrative report.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import Settings, get_settings
-from backend.granite_service import GraniteService
+from backend.gemini_service import GeminiService
 from backend.models import (
     AuditConfig,
     AuditStatus,
@@ -344,10 +344,15 @@ class AuditEngine:
     def __init__(
         self,
         settings: Settings | None = None,
-        granite: GraniteService | None = None,
+        gemini: GeminiService | None = None,
+        granite: GeminiService | None = None,
     ) -> None:
         self._settings = settings or get_settings()
-        self._granite = granite or GraniteService(self._settings)
+        self._gemini = gemini or granite or GeminiService(self._settings)
+
+    @property
+    def _granite(self) -> GeminiService:
+        return self._gemini
 
     # ── public entry point ──────────────────────────────────────────────
 
@@ -438,10 +443,10 @@ class AuditEngine:
                 else 100.0
             )
 
-            # Step 4: AI analysis (optional — only if Granite is configured)
-            if self._granite.is_available():
+            # Step 4: AI analysis (optional — only if Gemini is configured)
+            if self._gemini.is_available():
                 try:
-                    narrative, recs = self._granite.analyse_results(
+                    narrative, recs = self._gemini.analyse_results(
                         overall_score=summary.overall_mutation_score,
                         killed=summary.total_killed,
                         total=summary.total_mutants,
@@ -497,10 +502,10 @@ class AuditEngine:
                 )
             )
 
-        # ── AI mutations (Granite) ────────────────────────────────────
-        if max_ai > 0 and self._granite.is_available():
+        # ── AI mutations (Gemini) ─────────────────────────────────────
+        if max_ai > 0 and self._gemini.is_available():
             try:
-                ai_mutations = self._granite.generate_mutations(
+                ai_mutations = self._gemini.generate_mutations(
                     file_path=file_path,
                     source_code=source_code,
                     max_mutations=max_ai,

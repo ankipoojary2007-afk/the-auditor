@@ -189,4 +189,5 @@ class HealthResponse(BaseModel):
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
     )
+    gemini_configured: bool = False
     watsonx_configured: bool = False

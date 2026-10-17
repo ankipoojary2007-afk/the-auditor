@@ -45,10 +45,10 @@ class TestHealthEndpoint:
         assert "timestamp" in data
 
     @pytest.mark.asyncio
-    async def test_health_reports_watsonx_status(self, client: AsyncClient):
+    async def test_health_reports_gemini_status(self, client: AsyncClient):
         resp = await client.get("/health")
         data = resp.json()
-        # Without credentials configured, should be False
+        assert "gemini_configured" in data
         assert "watsonx_configured" in data
 
 
