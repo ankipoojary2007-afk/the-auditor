@@ -208,7 +208,7 @@ Contributions and suggestions are welcome.
 
 ## 📄 License
 
-Refer to the repository's license file, if one exists, for the terms governing use and redistribution.
+Refer to the repository's license file, for the terms governing use and redistribution.
 
 ---
 
