@@ -2,7 +2,7 @@
 Configuration module for The Auditor backend.
 
 Loads environment variables from a .env file and exposes them
-as a validated Pydantic settings model. All IBM watsonx.ai
+as a validated Pydantic settings model. All Google Gemini
 credentials, sandbox limits, and server tuning live here.
 """
 
@@ -33,30 +33,9 @@ class Settings(BaseSettings):
     for production.
     """
 
-    # ── IBM watsonx.ai credentials ──────────────────────────────────────
-    watsonx_api_key: str = Field(
-        default="",
-        description="IBM Cloud API key for watsonx.ai authentication.",
-    )
-    watsonx_url: str = Field(
-        default="https://us-south.ml.cloud.ibm.com",
-        description="Regional endpoint URL for watsonx.ai.",
-    )
-    watsonx_project_id: str = Field(
-        default="",
-        description="watsonx.ai project / space ID.",
-    )
-    granite_model_id: str = Field(
-        default="ibm/granite-3-3-8b-instruct",
-        description="Foundation model identifier on watsonx.ai.",
-    )
-
-    # ── Granite generation parameters ───────────────────────────────────
-    granite_max_new_tokens: int = Field(default=1024, ge=1, le=8192)
-    granite_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    granite_top_p: float = Field(default=0.9, ge=0.0, le=1.0)
-    granite_top_k: int = Field(default=50, ge=1, le=500)
-    granite_repetition_penalty: float = Field(default=1.05, ge=1.0, le=2.0)
+    # ── Google Gemini credentials ───────────────────────────────────────
+    gemini_api_key: str
+    gemini_model_id: str = "gemini-1.5-pro"
 
     # ── Sandbox / secure execution limits ───────────────────────────────
     sandbox_timeout_seconds: int = Field(
@@ -83,7 +62,7 @@ class Settings(BaseSettings):
     )
     ai_mutations_per_file: int = Field(
         default=5,
-        description="Number of Granite-suggested semantic mutations per file.",
+        description="Number of AI-suggested semantic mutations per file.",
     )
 
     # ── Server ──────────────────────────────────────────────────────────
