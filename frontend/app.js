@@ -241,27 +241,47 @@ function normStatus(s) {
 }
 
 function normalise(raw) {
-  const list = pick(raw, ["mutants", "mutations", "mutation_results", "results"], []);
-  const mutants = list.map((m0, i) => { const m = (m0 && typeof m0.mutation === "object") ? { ...m0.mutation, ...m0 } : m0; return {
-    id: pick(m, ["id", "mutant_id"], i + 1),
-    file: pick(m, ["file", "file_path", "filename", "source_file"], "unknown file"),
-    line: pick(m, ["line", "line_number", "lineno"], "?"),
-    operator: pick(m, ["operator", "mutation_type", "type", "description"], "Code change"),
-    original: pick(m, ["original", "original_code", "original_line"], ""),
-    mutated: pick(m, ["mutated", "mutated_code", "mutated_line"], ""),
-    status: normStatus(pick(m, ["status", "result", "outcome"], "")),
-    suggestion: pick(m, ["suggestion", "recommendation", "fix", "ai_suggestion"], ""),
-  }; });
-  const killed = mutants.filter((m) => m.status === "killed").length;
-  const survived = mutants.filter((m) => m.status === "survived").length;
-  const errors = mutants.filter((m) => m.status === "error").length;
-  const judged = killed + survived;
-  const score = judged ? Math.round((killed / judged) * 100) : 0;
+  // Extract mutants: check top-level mutants first, then flatten file_results
+  let list = pick(raw, ["mutants", "mutations", "mutation_results", "results"], null);
+  if (!list && raw.file_results && Array.isArray(raw.file_results)) {
+    list = raw.file_results.flatMap((f) =>
+      (f.mutants || []).map((m) => ({ ...m, file: m.file_path || f.file_path }))
+    );
+  }
+  list = list || [];
 
-  let ai = pick(raw, ["ai_summary", "ai_analysis", "summary", "analysis", "recommendations"], "");
+  const mutants = list.map((m0, i) => {
+    const m = (m0 && typeof m0.mutation === "object") ? { ...m0.mutation, ...m0 } : m0;
+    return {
+      id: pick(m, ["id", "mutant_id"], i + 1),
+      file: pick(m, ["file", "file_path", "filename", "source_file"], "unknown file"),
+      line: pick(m, ["line", "line_number", "lineno"], "?"),
+      operator: pick(m, ["operator", "mutation_type", "type", "description", "mutation_description"], "Code change"),
+      original: pick(m, ["original", "original_code", "original_line"], ""),
+      mutated: pick(m, ["mutated", "mutated_code", "mutated_line"], ""),
+      status: normStatus(pick(m, ["status", "result", "outcome"], "")),
+      suggestion: pick(m, ["suggestion", "recommendation", "fix", "ai_suggestion"], ""),
+    };
+  });
+
+  const killed = raw.total_killed !== undefined ? raw.total_killed : mutants.filter((m) => m.status === "killed").length;
+  const survived = raw.total_survived !== undefined ? raw.total_survived : mutants.filter((m) => m.status === "survived").length;
+  const errors = mutants.filter((m) => m.status === "error").length;
+  const total = raw.total_mutants !== undefined ? raw.total_mutants : mutants.length;
+  const judged = killed + survived;
+  const score = raw.overall_mutation_score !== undefined
+    ? Math.round(raw.overall_mutation_score)
+    : (judged ? Math.round((killed / judged) * 100) : 0);
+
+  let ai = pick(raw, ["ai_summary", "ai_analysis", "summary", "analysis"], "");
   if (Array.isArray(ai)) ai = ai.join("\n");
   else if (ai && typeof ai === "object") ai = Object.values(ai).flat().filter((v) => typeof v === "string").join("\n");
   if (typeof ai !== "string") ai = "";
+
+  if (raw.recommendations && Array.isArray(raw.recommendations) && raw.recommendations.length > 0) {
+    const recsText = raw.recommendations.map((r) => `• ${r}`).join("\n");
+    ai = ai ? `${ai}\n\nRecommendations:\n${recsText}` : recsText;
+  }
 
   const duration = pick(raw, ["duration_seconds", "duration"], null);
   const failed = String(raw.status || "").toLowerCase() === "failed";
@@ -272,7 +292,7 @@ function normalise(raw) {
     baselineFailed: raw.baseline_passed === false || failed,
     errorMessage: raw.error_message || "",
     mutants,
-    counts: { killed, survived, errors, total: mutants.length, score },
+    counts: { killed, survived, errors, total, score },
     raw,
   };
 }
