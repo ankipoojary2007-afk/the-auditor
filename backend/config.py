@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # ── Google Gemini credentials ───────────────────────────────────────
     gemini_api_key: str
-    gemini_model_id: str = "gemini-1.5-pro"
+    gemini_model_id: str = "gemini-3.8-flash"
 
     # ── Sandbox / secure execution limits ───────────────────────────────
     sandbox_timeout_seconds: int = Field(
