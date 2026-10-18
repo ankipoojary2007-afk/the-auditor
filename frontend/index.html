@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Auditor – Find the tests that never fail</title>
+  <meta name="description" content="Auditor breaks your code on purpose to find unit tests that stay green when they shouldn't. Analysis runs on a local AI model." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2.5"/>
+        <circle cx="16" cy="16" r="6" fill="currentColor"/>
+        <path d="M16 2v5M16 25v5M2 16h5M25 16h5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span>Auditor</span>
+    </div>
+    <div class="privacy-pill" title="Flagged code is analysed by a model running on your own machine.">
+      <span class="dot"></span> Local AI · your code never leaves this machine
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Your tests say <span class="pass-word">PASS</span>.<br />Would they notice a bug?</h1>
+        <p class="lead">
+          A test that never fails is like a smoke detector with no battery.
+          Auditor breaks your code on purpose and shows you which tests stay silent.
+        </p>
+      </div>
+
+      <figure class="hero-demo" aria-label="Example of a mutation that tests fail to catch">
+        <figcaption>What Auditor does to one line</figcaption>
+        <div class="code-card">
+          <div class="code-file">calculator.py</div>
+          <div class="code-line removed"><span class="sign">−</span><code>return a + b</code></div>
+          <div class="code-line added"><span class="sign">+</span><code>return a - b</code></div>
+        </div>
+        <div class="verdict-row">
+          <span class="chip chip-pass">test_add &nbsp;PASS</span>
+          <span class="verdict-text">Code is broken, test still passes. Flagged as weak.</span>
+        </div>
+      </figure>
+    </section>
+
+    <!-- UPLOAD -->
+    <section class="panel" id="audit-panel" aria-labelledby="audit-title">
+      <h2 id="audit-title">Audit a project</h2>
+      <p class="muted">Give Auditor a project that has unit tests. It runs them first, then breaks the code and runs them again.</p>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" role="tab" aria-selected="true" data-tab="zip" id="tab-zip">Upload ZIP</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="repo" id="tab-repo">GitHub link</button>
+      </div>
+
+      <div class="tab-body" id="body-zip">
+        <label class="dropzone" id="dropzone" for="file-input">
+          <svg viewBox="0 0 24 24" class="drop-icon" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="drop-title" id="drop-title">Drop your project .zip here</span>
+          <span class="drop-sub" id="drop-sub">or click to choose a file</span>
+          <input type="file" id="file-input" accept=".zip" hidden />
+        </label>
+      </div>
+
+      <div class="tab-body hidden" id="body-repo">
+        <label class="field-label" for="repo-url">Public repository URL</label>
+        <input type="url" id="repo-url" class="text-input" placeholder="https://github.com/your-name/your-project" />
+      </div>
+
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="run-btn" type="button">Run audit</button>
+        <button class="btn btn-ghost" id="demo-btn" type="button">See a sample report</button>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section class="panel hidden" id="progress-panel" aria-live="polite">
+      <h2>Audit in progress</h2>
+      <ol class="steps" id="steps">
+        <li data-step="0"><span class="step-icon"></span><div><strong>Unpack project</strong><small>Reading files and finding tests</small></div></li>
+        <li data-step="1"><span class="step-icon"></span><div><strong>Run original tests</strong><small>They must all pass before we can compare</small></div></li>
+        <li data-step="2"><span class="step-icon"></span><div><strong>Break the code on purpose</strong><small>Swapping operators, flipping conditions, changing values</small></div></li>
+        <li data-step="3"><span class="step-icon"></span><div><strong>Re-run tests on each broken version</strong><small>A test that still passes missed the bug</small></div></li>
+        <li data-step="4"><span class="step-icon"></span><div><strong>Local AI review</strong><small>Suggesting stronger tests, on this machine only</small></div></li>
+      </ol>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="hidden" id="results" aria-labelledby="results-title">
+      <div class="results-head">
+        <div>
+          <h2 id="results-title">Audit report</h2>
+          <p class="muted" id="results-meta"></p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost" id="download-btn" type="button">Download JSON</button>
+          <button class="btn btn-primary" id="again-btn" type="button">Audit another project</button>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="score-card" id="score-card">
+          <div class="gauge">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="gauge-track" cx="60" cy="60" r="52"/>
+              <circle class="gauge-fill" id="gauge-fill" cx="60" cy="60" r="52"/>
+            </svg>
+            <div class="gauge-num"><span id="score-num">0</span><small>%</small></div>
+          </div>
+          <div>
+            <div class="verdict" id="verdict-title">–</div>
+            <p class="muted" id="verdict-text"></p>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span class="stat-num" id="st-total">0</span><span class="stat-label">Bugs injected</span></div>
+          <div class="stat good"><span class="stat-num" id="st-killed">0</span><span class="stat-label">Caught by tests</span></div>
+          <div class="stat bad"><span class="stat-num" id="st-survived">0</span><span class="stat-label">Missed by tests</span></div>
+          <div class="stat warn"><span class="stat-num" id="st-errors">0</span><span class="stat-label">Could not run</span></div>
+        </div>
+      </div>
+
+      <div class="panel ai-panel" id="ai-panel" hidden>
+        <div class="ai-head">
+          <h3>AI review</h3>
+          <span class="chip chip-local">Ran locally</span>
+        </div>
+        <p id="ai-text"></p>
+      </div>
+
+      <div class="panel">
+        <div class="list-head">
+          <h3>Injected bugs</h3>
+          <div class="filters" id="filters" role="group" aria-label="Filter injected bugs">
+            <button class="filter active" data-filter="all">All</button>
+            <button class="filter" data-filter="survived">Missed</button>
+            <button class="filter" data-filter="killed">Caught</button>
+            <button class="filter" data-filter="error">Errors</button>
+          </div>
+        </div>
+        <p class="muted small">A <strong>missed</strong> bug means your tests still passed on broken code. Open one to see the change and what to test.</p>
+        <div class="mutants" id="mutants"></div>
+        <p class="empty hidden" id="empty">Nothing to show for this filter.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Auditor · built for AI Secured: Innovation Without Exposure</span>
+  </footer>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
