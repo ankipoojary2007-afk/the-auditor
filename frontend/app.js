@@ -1,35 +1,17 @@
 /* =========================================================
    Auditor frontend
-   Talks to the backend (audit_engine.py) over HTTP.
-   Change CONFIG below if your teammate's API differs.
+   Talks to backend/main.py (FastAPI) over HTTP.
+   Flow: POST /audit/upload (zip) -> audit_id -> GET /audit/{audit_id}
    ========================================================= */
 
 const CONFIG = {
-  API_BASE: "http://localhost:8000",   // backend address
-  AUDIT_ENDPOINT: "/api/audit",        // POST: multipart/form-data
-  ZIP_FIELD: "file",                   // form field name for the zip
-  REPO_FIELD: "repo_url",              // form field name for the GitHub link
+  // Same address as the page when the backend serves it; otherwise the usual local backend.
+  API_BASE: (location.protocol.startsWith("http") && ["", "8000"].includes(location.port)) ? "" : "http://localhost:8000",
+  UPLOAD_ENDPOINT: "/audit/upload",    // POST multipart/form-data
+  RESULT_ENDPOINT: "/audit/",          // GET + audit_id
+  ZIP_FIELD: "archive",                // form field name the backend expects
   TIMEOUT_MS: 10 * 60 * 1000,          // audits can be slow
 };
-
-/*
-  Expected JSON response (see schemas.py). Missing fields are handled safely.
-  {
-    "project_name": "sample_project",
-    "baseline_passed": true,
-    "duration_seconds": 14.2,
-    "ai_summary": "text from the local model",
-    "mutants": [
-      {
-        "id": 1, "file": "calculator.py", "line": 3,
-        "operator": "Arithmetic swap",
-        "original": "return a + b", "mutated": "return a - b",
-        "status": "survived" | "killed" | "error",
-        "suggestion": "Add a test that checks add(2, 3) == 5"
-      }
-    ]
-  }
-*/
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -107,18 +89,9 @@ els.downloadBtn.addEventListener("click", downloadReport);
 
 async function runAudit() {
   showError("");
+  if (!state.file) return showError("Choose a project .zip file first.");
   const form = new FormData();
-
-  if (state.mode === "zip") {
-    if (!state.file) return showError("Choose a project .zip file first.");
-    form.append(CONFIG.ZIP_FIELD, state.file);
-  } else {
-    const url = els.repoUrl.value.trim();
-    if (!/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+/i.test(url)) {
-      return showError("Enter a GitHub link like https://github.com/name/project");
-    }
-    form.append(CONFIG.REPO_FIELD, url);
-  }
+  form.append(CONFIG.ZIP_FIELD, state.file);
 
   showProgress();
   startSteps();
@@ -127,29 +100,41 @@ async function runAudit() {
   const timer = setTimeout(() => controller.abort(), CONFIG.TIMEOUT_MS);
 
   try {
-    const res = await fetch(CONFIG.API_BASE + CONFIG.AUDIT_ENDPOINT, {
+    // 1) upload the zip; the backend runs the audit and returns an audit_id
+    const res = await fetch(CONFIG.API_BASE + CONFIG.UPLOAD_ENDPOINT, {
       method: "POST", body: form, signal: controller.signal,
     });
-    if (!res.ok) {
-      let detail = "";
-      try { const j = await res.json(); detail = j.detail || j.error || ""; } catch (_) {}
-      throw new Error(detail || `Server returned ${res.status}`);
-    }
-    const data = await res.json();
+    const job = await readJson(res);
+
+    // 2) fetch the full report for that audit_id
+    const full = await fetch(
+      CONFIG.API_BASE + CONFIG.RESULT_ENDPOINT + encodeURIComponent(job.audit_id),
+      { signal: controller.signal }
+    );
+    const data = await readJson(full);
+
     finishSteps();
     setTimeout(() => renderReport(data, false), 450);
   } catch (err) {
     stopSteps();
     hideProgress();
-    const offline = err.name === "TypeError";
     showError(
       err.name === "AbortError" ? "The audit took too long and was stopped. Try a smaller project."
-      : offline ? "Cannot reach the backend. Start it, check CONFIG.API_BASE in app.js, or click “See a sample report”."
+      : err.name === "TypeError" ? "Cannot reach the backend. Check it is running and that CORS allows this page, or click \u201cSee a sample report\u201d."
       : `Audit failed: ${err.message}`
     );
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function readJson(res) {
+  if (!res.ok) {
+    let detail = "";
+    try { const j = await res.json(); if (typeof j.detail === "string") detail = j.detail; } catch (_) {}
+    throw new Error(detail || `Server returned ${res.status}`);
+  }
+  return res.json();
 }
 
 /* ---------- Progress steps ---------- */
@@ -225,6 +210,7 @@ function renderReport(raw, isDemo) {
   const tone = score >= 80 ? "good" : score >= 50 ? "mid" : "bad";
   els.scoreCard.className = `score-card tone-${tone}`;
   const v = verdictFor(score, report.baselineFailed);
+  if (report.baselineFailed && report.errorMessage) v.text = report.errorMessage;
   els.verdictTitle.textContent = v.title;
   els.verdictText.textContent = v.text;
   animateScore(score);
@@ -239,29 +225,52 @@ function renderReport(raw, isDemo) {
   els.results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// Reads the first field that exists, so small naming differences in the backend do not break the page.
+function pick(obj, keys, fallback) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+  }
+  return fallback;
+}
+
+function normStatus(s) {
+  const v = String(s || "").toLowerCase();
+  if (["survived", "alive", "missed", "not_killed"].includes(v)) return "survived";
+  if (["killed", "caught", "detected"].includes(v)) return "killed";
+  return "error";
+}
+
 function normalise(raw) {
-  const mutants = (raw.mutants || []).map((m, i) => ({
-    id: m.id ?? i + 1,
-    file: m.file || "unknown file",
-    line: m.line ?? "?",
-    operator: m.operator || m.type || "Code change",
-    original: m.original ?? "",
-    mutated: m.mutated ?? "",
-    status: ["killed", "survived", "error"].includes(m.status) ? m.status : "error",
-    suggestion: m.suggestion || "",
-  }));
+  const list = pick(raw, ["mutants", "mutations", "mutation_results", "results"], []);
+  const mutants = list.map((m0, i) => { const m = (m0 && typeof m0.mutation === "object") ? { ...m0.mutation, ...m0 } : m0; return {
+    id: pick(m, ["id", "mutant_id"], i + 1),
+    file: pick(m, ["file", "file_path", "filename", "source_file"], "unknown file"),
+    line: pick(m, ["line", "line_number", "lineno"], "?"),
+    operator: pick(m, ["operator", "mutation_type", "type", "description"], "Code change"),
+    original: pick(m, ["original", "original_code", "original_line"], ""),
+    mutated: pick(m, ["mutated", "mutated_code", "mutated_line"], ""),
+    status: normStatus(pick(m, ["status", "result", "outcome"], "")),
+    suggestion: pick(m, ["suggestion", "recommendation", "fix", "ai_suggestion"], ""),
+  }; });
   const killed = mutants.filter((m) => m.status === "killed").length;
   const survived = mutants.filter((m) => m.status === "survived").length;
   const errors = mutants.filter((m) => m.status === "error").length;
   const judged = killed + survived;
-  const score = typeof raw.score === "number"
-    ? Math.round(raw.score)
-    : judged ? Math.round((killed / judged) * 100) : 0;
+  const score = judged ? Math.round((killed / judged) * 100) : 0;
+
+  let ai = pick(raw, ["ai_summary", "ai_analysis", "summary", "analysis", "recommendations"], "");
+  if (Array.isArray(ai)) ai = ai.join("\n");
+  else if (ai && typeof ai === "object") ai = Object.values(ai).flat().filter((v) => typeof v === "string").join("\n");
+  if (typeof ai !== "string") ai = "";
+
+  const duration = pick(raw, ["duration_seconds", "duration"], null);
+  const failed = String(raw.status || "").toLowerCase() === "failed";
   return {
-    project: raw.project_name || "",
-    duration: raw.duration_seconds != null ? Number(raw.duration_seconds).toFixed(1) : "",
-    aiSummary: raw.ai_summary || "",
-    baselineFailed: raw.baseline_passed === false,
+    project: pick(raw, ["project_name"], ""),
+    duration: duration != null && !isNaN(duration) ? Number(duration).toFixed(1) : "",
+    aiSummary: ai,
+    baselineFailed: raw.baseline_passed === false || failed,
+    errorMessage: raw.error_message || "",
     mutants,
     counts: { killed, survived, errors, total: mutants.length, score },
     raw,
@@ -372,7 +381,7 @@ function resetToStart() {
   els.dropzone.classList.remove("has-file");
   els.dropTitle.textContent = "Drop your project .zip here";
   els.dropSub.textContent = "or click to choose a file";
-  els.repoUrl.value = "";
+  if (els.repoUrl) els.repoUrl.value = "";
   showError("");
   els.results.classList.add("hidden");
   els.auditPanel.classList.remove("hidden");
