@@ -5,8 +5,10 @@
    ========================================================= */
 
 const CONFIG = {
-  // Same address as the page when the backend serves it; otherwise the usual local backend.
-  API_BASE: (location.protocol.startsWith("http") && ["", "8000"].includes(location.port)) ? "" : "http://localhost:8000",
+  // Always talk to port 8000 on the current hostname (e.g. 148.100.108.240:8000 or localhost:8000)
+  API_BASE: location.protocol.startsWith("http")
+    ? `${location.protocol}//${location.hostname}:8000`
+    : "http://localhost:8000",
   UPLOAD_ENDPOINT: "/audit/upload",    // POST multipart/form-data
   RESULT_ENDPOINT: "/audit/",          // GET + audit_id
   ZIP_FIELD: "archive",                // form field name the backend expects
