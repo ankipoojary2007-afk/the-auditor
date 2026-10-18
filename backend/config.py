@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # ── Sandbox / secure execution limits ───────────────────────────────
     sandbox_timeout_seconds: int = Field(
-        default=10,
+        default=60,
         description="Max wall-clock time (seconds) for a single test run.",
     )
     sandbox_max_memory_mb: int = Field(
@@ -57,11 +57,11 @@ class Settings(BaseSettings):
 
     # ── Mutation engine tuning ──────────────────────────────────────────
     max_mutations_per_file: int = Field(
-        default=6,
+        default=50,
         description="Cap on AST-based mutations generated per source file.",
     )
     ai_mutations_per_file: int = Field(
-        default=2,
+        default=5,
         description="Number of AI-suggested semantic mutations per file.",
     )
 

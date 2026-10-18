@@ -150,7 +150,7 @@ async def start_audit(request: AuditRequest):
 @app.post("/audit/upload", response_model=AuditStatusResponse, tags=["Audit"])
 async def upload_and_audit(
     archive: UploadFile = File(..., description="ZIP archive of the project."),
-    test_command: str = "pytest -x -q --tb=no",
+    test_command: str = "pytest --tb=short -q",
 ):
     """
     Upload a ZIP archive containing a Python project, then run
